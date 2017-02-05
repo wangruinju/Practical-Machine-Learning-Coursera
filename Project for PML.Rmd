@@ -1,0 +1,131 @@
+---
+title: "Project for PML"
+author: "Rui Wang"
+output:
+  pdf_document: default
+  html_document: default
+Date: 02/04/2017
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+### Load the package and data
+
+I first get started with loading the package and data I might use in the code.
+```{r, cache=TRUE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+# load the data I have already saved in the directory
+# fill the empty column with NA value for data cleaning later
+training <- read.csv("pml-training.csv", na.strings = c("NA", ""), header = TRUE)
+testing <- read.csv("pml-testing.csv", na.strings = c("NA", ""), header = TRUE)
+
+# set the same seed
+set.seed(666)
+
+# look at the sample size
+dim(training)
+dim(testing)
+
+# all the column names are the same except the last one ("classe" and "problem_id")
+index <- which(!(colnames(training) == colnames(testing)))
+colnames(training)[index]
+colnames(testing)[index]
+```
+
+### Data processing and cleaning
+
+I will eliminate both NAs in the training and testing data.
+```{r, cache=TRUE}
+set.seed(666)
+
+# count the number of non-NAs in each column of both data
+count_train <- as.vector(apply(training, 2, function(x) length(which(!is.na(x)))))
+# choose the column index of more than 60% non-NAs
+index_train <- which(count_train/dim(training)[1] > 0.6)
+training <- training[, index_train]
+
+# do the same process for testing set
+count_test <- as.vector(apply(testing, 2, function(x) length(which(!is.na(x)))))
+index_test <- which(count_test/dim(testing)[1] > 0.6)
+testing <- testing[, index_test]
+
+# check the column names again
+# all the column names are the same except the last one ("classe" and "problem_id")
+index <- which(!(colnames(training) == colnames(testing)))
+colnames(training)[index]
+colnames(testing)[index]
+
+# remove the first 7 columns of both data since they are not related with the measurement data
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+```
+
+Now the data sets are ready to go! Since the data size between training and testing is not comparable, I decide to split my training set into training and testing data sets by 6:4 to find the best model. Last I will use the best model I find out to predict the small data set with only 20 observations.
+
+```{r, cache=TRUE}
+set.seed(666)
+inTrain <- createDataPartition(y = training$classe, p = 0.6, list = FALSE)
+my_training <- training[inTrain, ]
+my_testing <- training[-inTrain, ]
+# check each dimension
+dim(my_training)
+dim(my_testing)
+```
+
+### Model and prediction
+
+I will use 2 different `rpart` and `randomForest` packages to fit and predict the data.
+
+### 1st model with recursive partitioning and regression trees
+
+```{r, cache=TRUE}
+set.seed(666)
+mod1 <- rpart(classe ~. , method = "class", data = my_training)
+# plot the decision tree
+fancyRpartPlot(mod1)
+# print the test results
+predict1 <- predict(mod1, my_testing, type = "class")
+confusionMatrix(predict1, my_testing$classe)
+accuracy1 <- confusionMatrix(predict1, my_testing$classe)$overall[1]
+```
+Conclusion: After I apply the first model with `rpart`, the accuracy I obtain is `r round(accuracy1, 3)`, which seems relatively a good model to predict the data.
+
+### 2nd model using random forests
+
+```{r, cache=TRUE}
+set.seed(666)
+mod2 <- randomForest(classe ~. , method = "class", data = my_training)
+predict2 <- predict(mod2, my_testing, type = "class")
+confusionMatrix(predict2, my_testing$classe)
+accuracy2 <- confusionMatrix(predict2, my_testing$classe)$overall[1]
+```
+Conclusion: The second model with `randomForest` provides a nearly-perfect prediction. The accuracy I obtain from this model is `r round(accuracy2, 3)`. 
+
+### Prediction on the test data sets
+It is no doubt that I will choose the `randomForest` model to predict the short test data with only 20 observations.
+```{r, cache=TRUE}
+predict(mod2, testing, type = "class")
+```
